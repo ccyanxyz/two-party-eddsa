@@ -9,9 +9,6 @@ use eddsa::*;
 mod util;
 use util::*;
 
-const eight: FE = ECScalar::from(&BigInt::from(8));
-const eight_inverse: FE = eight.invert();
-
 fn main() {
     let host = "0.0.0.0:8000";
 
