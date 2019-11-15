@@ -2,6 +2,7 @@ use super::super::Result;
 use rocket::State;
 use rocket_contrib::json::Json;
 use super::super::storage::db;
+use super::super::storage::file;
 use uuid::Uuid;
 
 use rocksdb::DB;
@@ -25,6 +26,7 @@ pub enum MPCStruct {
 
 pub struct Config {
     pub db: DB,
+    pub filepath: String,
 }
 
 #[post("/keygen", format = "json", data = "<party2_public_key_json>")]
@@ -37,8 +39,8 @@ pub fn keygen(
     let eight: FE = ECScalar::from(&BigInt::from(8));
     let eight_inverse: FE = eight.invert();
     let party2_public_key = party2_public_key_json.0 * &eight_inverse;
-    db::insert(
-        &state.db,
+    file::insert(
+        &state.filepath,
         &id,
         &Party2PublicKey,
         &party2_public_key,
@@ -49,14 +51,14 @@ pub fn keygen(
     pks.push(party1_key_pair.public_key.clone());
     pks.push(party2_public_key.clone());
     let key_agg = KeyPair::key_aggregation_n(&pks, &PARTY1_INDEX);
-    db::insert(
-        &state.db,
+    file::insert(
+        &state.filepath,
         &id,
         &Party1KeyPair,
         &party1_key_pair,
     )?;
-    db::insert(
-        &state.db,
+    file::insert(
+        &state.filepath,
         &id,
         &AggregatedPublicKey,
         &key_agg,
@@ -74,8 +76,8 @@ pub fn sign_first(
     let (party2_sign_first_msg, message): (SignFirstMsg, BigInt) =
         party2_sign_first_msg_obj.0;
 
-    let party1_key_pair: KeyPair = db::get(
-        &state.db,
+    let party1_key_pair: KeyPair = file::get(
+        &state.filepath,
         &id,
         &Party1KeyPair)?
         .ok_or(format_err!("No data for such identifier {}", id))?;
@@ -83,32 +85,32 @@ pub fn sign_first(
     let (party1_ephemeral_key, party1_sign_first_msg, party1_sign_second_msg) =
         Signature::create_ephemeral_key_and_commit(&party1_key_pair, &BigInt::to_vec(&message).as_slice());
 
-    db::insert(
-        &state.db,
+    file::insert(
+        &state.filepath,
         &id,
         &Party2SignFirstMsg,
         &party2_sign_first_msg,
     )?;
-    db::insert(
-        &state.db,
+    file::insert(
+        &state.filepath,
         &id,
         &Message,
         &message,
     )?;
-    db::insert(
-        &state.db,
+    file::insert(
+        &state.filepath,
         &id,
         &Party1EphemeralKey,
         &party1_ephemeral_key,
     )?;
-    db::insert(
-        &state.db,
+    file::insert(
+        &state.filepath,
         &id,
         &Party1SignFirstMsg,
         &party1_sign_first_msg,
     )?;
-    db::insert(
-        &state.db,
+    file::insert(
+        &state.filepath,
         &id,
         &Party1SignSecondMsg,
         &party1_sign_second_msg,
@@ -124,8 +126,8 @@ pub fn sign_second(
     id: String,
     mut party2_sign_second_msg: Json<SignSecondMsg>,
 ) -> Result<Json<(SignSecondMsg, Signature)>> {
-    let party2_sign_first_msg: SignFirstMsg = db::get(
-        &state.db,
+    let party2_sign_first_msg: SignFirstMsg = file::get(
+        &state.filepath,
         &id,
         &Party2SignFirstMsg)?
         .ok_or(format_err!("No data for such identifier {}", id))?;
@@ -138,31 +140,31 @@ pub fn sign_second(
         &party2_sign_first_msg.commitment
     ));
 
-    let party1_key_pair: KeyPair = db::get(
-        &state.db,
+    let party1_key_pair: KeyPair = file::get(
+        &state.filepath,
         &id,
         &Party1KeyPair)?
         .ok_or(format_err!("No data for such identifier {}", id))?;
-    let mut party1_ephemeral_key: EphemeralKey = db::get(
-        &state.db,
+    let mut party1_ephemeral_key: EphemeralKey = file::get(
+        &state.filepath,
         &id,
         &Party1EphemeralKey)?
         .ok_or(format_err!("No data for such identifier {}", id))?;
-    let mut party1_sign_second_msg: SignSecondMsg = db::get(
-        &state.db,
+    let mut party1_sign_second_msg: SignSecondMsg = file::get(
+        &state.filepath,
         &id,
         &Party1SignSecondMsg)?
         .ok_or(format_err!("No data for such identifier {}", id))?;
     party1_ephemeral_key.R = party1_ephemeral_key.R * &eight_inverse;
     party1_sign_second_msg.R = party1_sign_second_msg.R * &eight_inverse;
-    let mut key_agg: KeyAgg = db::get(
-        &state.db,
+    let mut key_agg: KeyAgg = file::get(
+        &state.filepath,
         &id,
         &AggregatedPublicKey)?
         .ok_or(format_err!("No data for such identifier {}", id))?;
     key_agg.apk = key_agg.apk * &eight_inverse;
-    let message: BigInt = db::get(
-        &state.db,
+    let message: BigInt = file::get(
+        &state.filepath,
         &id,
         &Message)?
         .ok_or(format_err!("No data for such identifier {}", id))?;
