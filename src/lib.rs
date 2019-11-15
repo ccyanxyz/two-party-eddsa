@@ -5,7 +5,7 @@ extern crate hex;
 extern crate serde_derive;
 extern crate serde_json;
 
-pub mod two_party_eddsa;
+pub mod eddsa;
 
 #[derive(Copy, PartialEq, Eq, Clone, Debug)]
 pub enum Error {

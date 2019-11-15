@@ -12,6 +12,8 @@ crate-type = ["rlib", "dylib"]
 [[bin]]
 name = "client"
 path = "src/client.rs"
+
+[[bin]]
 name = "server"
 path = "src/server.rs"
 
@@ -23,4 +25,5 @@ serde_json = "1.0"
 serde_derive = "1.0"
 argparse = "0.2.2"
 stopwatch = "0.0.7"
+rustc-serialize = "0.3"
 uuid = { version = "0.7", features = ["v4"] }

@@ -2,8 +2,8 @@
 mod tests {
     use curv::elliptic::curves::traits::ECPoint;
     use curv::GE;
-    mod two_party_eddsa;
-    use two_party_eddsa::{test_com, verify, KeyPair, Signature};
+    mod eddsa;
+    use eddsa::{test_com, verify, KeyPair, Signature};
 
     #[test]
     fn test_ed25519_one_party() {

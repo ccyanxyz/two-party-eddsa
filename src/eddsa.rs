@@ -4,7 +4,7 @@
 //! See https://tools.ietf.org/html/rfc8032
 use curv::cryptographic_primitives::proofs::*;
 pub use curv::elliptic::curves::traits::*;
-pub use curv::{BigInt, FE, GE};
+pub use curv::{BigInt, FE, GE, SK};
 
 use curv::cryptographic_primitives::hashing::hash_sha512::HSha512;
 use curv::cryptographic_primitives::hashing::traits::*;
@@ -13,25 +13,54 @@ pub use curv::arithmetic::traits::Converter;
 use curv::cryptographic_primitives::commitments::hash_commitment::HashCommitment;
 use curv::cryptographic_primitives::commitments::traits::*;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct ExpendedPrivateKey {
     pub prefix: FE,
-    private_key: FE,
+    pub private_key: FE,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+impl ExpendedPrivateKey {
+    pub fn serialize() -> [u8; 64] {
+        [0u8; 64]
+    }
+
+    //pub fn deserialize() -> ExpendedPrivateKey {
+
+    //}
+}
+
+#[derive(Clone, Debug)]
 pub struct KeyAgg {
     pub apk: GE,
     pub hash: FE,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+impl KeyAgg {
+    pub fn serialize() -> [u8; 64] {
+        [0u8; 64]
+    }
+
+    //pub fn deserialize() -> KeyAgg {
+
+    //}
+}
+
+#[derive(Clone, Debug)]
 pub struct KeyPair {
     pub public_key: GE,
-    expended_private_key: ExpendedPrivateKey,
+    pub expended_private_key: ExpendedPrivateKey,
 }
 
 impl KeyPair {
+    pub fn serialize() -> [u8; 96] {
+
+        [0u8; 96]
+    }
+
+    //pub fn deserialize() -> KeyPair {
+
+    //}
+
     pub fn create() -> KeyPair {
         let sk: FE = ECScalar::new_random();
         Self::create_from_private_key_internal(&sk)
@@ -109,30 +138,39 @@ impl KeyPair {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct EphemeralKey {
     pub r: FE,
     pub R: GE,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SignFirstMsg {
     pub commitment: BigInt,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SignSecondMsg {
     pub R: GE,
     pub blind_factor: BigInt,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Signature {
     pub R: GE,
     pub s: FE,
 }
 
 impl Signature {
+    pub fn serialize() -> [u8; 64] {
+
+        [0u8; 64]
+    }
+
+    //pub fn deserialize() -> Signature {
+
+    //}
+
     pub fn create_ephemeral_key_and_commit(
         keys: &KeyPair,
         message: &[u8],
