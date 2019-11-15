@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+#![allow(dead_code)]
 //! Simple ed25519
 //!
 //! See https://tools.ietf.org/html/rfc8032
@@ -19,30 +20,10 @@ pub struct ExpendedPrivateKey {
     pub private_key: FE,
 }
 
-impl ExpendedPrivateKey {
-    pub fn serialize() -> [u8; 64] {
-        [0u8; 64]
-    }
-
-    //pub fn deserialize() -> ExpendedPrivateKey {
-
-    //}
-}
-
 #[derive(Clone, Debug)]
 pub struct KeyAgg {
     pub apk: GE,
     pub hash: FE,
-}
-
-impl KeyAgg {
-    pub fn serialize() -> [u8; 64] {
-        [0u8; 64]
-    }
-
-    //pub fn deserialize() -> KeyAgg {
-
-    //}
 }
 
 #[derive(Clone, Debug)]
@@ -52,15 +33,6 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
-    pub fn serialize() -> [u8; 96] {
-
-        [0u8; 96]
-    }
-
-    //pub fn deserialize() -> KeyPair {
-
-    //}
-
     pub fn create() -> KeyPair {
         let sk: FE = ECScalar::new_random();
         Self::create_from_private_key_internal(&sk)
@@ -162,22 +134,12 @@ pub struct Signature {
 }
 
 impl Signature {
-    pub fn serialize() -> [u8; 64] {
-
-        [0u8; 64]
-    }
-
-    //pub fn deserialize() -> Signature {
-
-    //}
-
     pub fn create_ephemeral_key_and_commit(
         keys: &KeyPair,
         message: &[u8],
     ) -> (EphemeralKey, SignFirstMsg, SignSecondMsg) {
         // here we deviate from the spec, by introducing  non-deterministic element (random number)
         // to the nonce
-       /* 
         let r = HSha512::create_hash(&vec![
             &BigInt::from(2), // domain seperation
             &keys.expended_private_key.prefix.to_big_int(),
@@ -185,10 +147,9 @@ impl Signature {
             &FE::new_random().to_big_int(),
         ]);
         let r = reverse_bn_to_fe(&r);
-        */
         
-        let r = FE::new_random().to_big_int();
-        let r = reverse_bn_to_fe(&r);
+        //let r = FE::new_random().to_big_int();
+        //let r = reverse_bn_to_fe(&r);
         
         let ec_point: GE = ECPoint::generator();
         let R: GE = ec_point * &r;

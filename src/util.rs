@@ -1,4 +1,5 @@
-use std::io::prelude::*;
+#![allow(dead_code)]
+use std::io;
 use std::io::{ Read, Write };
 use std::fs::File;
 use std::vec::Vec;
@@ -18,11 +19,11 @@ pub fn save_keyfile(filepath: &str, keypair: KeyPair, keyagg: KeyAgg) {
     file.write_all(buf.as_slice()).expect("write failed");
 }
 
-pub fn load_keyfile(filepath: &str) -> (KeyPair, KeyAgg) {
+pub fn load_keyfile(filepath: &str) -> Result<(KeyPair, KeyAgg), io::Error> {
     // read keyfile
     let mut buf = Vec::new();
     let mut file = File::open(&filepath).unwrap();
-    file.read_to_end(&mut buf);
+    file.read_to_end(&mut buf)?;
 
     let eight: FE = ECScalar::from(&BigInt::from(8));
     let eight_inverse: FE = eight.invert();
@@ -55,7 +56,7 @@ pub fn load_keyfile(filepath: &str) -> (KeyPair, KeyAgg) {
         apk: agg_pubkey,
         hash: agg_pubkey_hash,
     };
-    (keypair, key_agg)
+    Ok((keypair, key_agg))
 }
 
 pub fn str_to_bigint(msg: String) -> BigInt {
@@ -65,8 +66,4 @@ pub fn str_to_bigint(msg: String) -> BigInt {
         .collect();
     let msg = strs.join("");
     BigInt::from_hex(&msg)
-}
-
-pub fn bigint_to_bytes(num: BigInt) -> [u8; 32] {
-    [0u8; 32] 
 }

@@ -1,11 +1,8 @@
+#![allow(non_snake_case)]
 use std::io;
 use std::thread;
-use std::str::from_utf8;
 use std::net::{ TcpListener, TcpStream };
 use std::io::{ Read, Write };
-
-extern crate rustc_serialize;
-use rustc_serialize::hex::ToHex;
 
 mod eddsa;
 use eddsa::*;
@@ -75,7 +72,7 @@ fn keygen(stream: &mut TcpStream, buf: &mut [u8; 200]) {
 }
 
 fn sign(stream: &mut TcpStream, buf: &mut [u8; 200], len: usize) {
-    let (server_keypair, key_agg) = load_keyfile("server.key");
+    let (server_keypair, key_agg) = load_keyfile("server.key").unwrap();
     
     let client_commitment = BigInt::from(&buf[1..33]);
     let msg = BigInt::from(&buf[33..len]);
@@ -86,11 +83,21 @@ fn sign(stream: &mut TcpStream, buf: &mut [u8; 200], len: usize) {
     let (server_ephemeral_key, server_sign_first_msg, server_sign_second_msg) = Signature::create_ephemeral_key_and_commit(&server_keypair, BigInt::to_vec(&msg).as_slice());
     println!("server_sign_first_msg: {:?}", server_sign_first_msg);
 
-    stream.write(&mut Converter::to_vec(&server_sign_first_msg.commitment));
+    match stream.write(&mut Converter::to_vec(&server_sign_first_msg.commitment)) {
+        Ok(_) => {  },
+        Err(e) => {
+            println!("stream write error: {:?}", e);
+        }
+    }
 
     // sign second
     let mut buf = [0u8; 64];
-    stream.read(&mut buf);
+    match stream.read(&mut buf) {
+        Ok(_) => {  },
+        Err(e) => {
+            println!("stream read error: {:?}", e);
+        }
+    }
     let eight: FE = ECScalar::from(&BigInt::from(8));
     let eight_inverse: FE = eight.invert();
     let client_sign_second_msg_R = GE::from_bytes(&buf[0..32]).unwrap();
@@ -122,5 +129,10 @@ fn sign(stream: &mut TcpStream, buf: &mut [u8; 200], len: usize) {
     buf.append(&mut Converter::to_vec(&server_sign_second_msg.blind_factor));
     buf.append(&mut s1.R.get_element().to_bytes().to_vec());
     buf.append(&mut s1.s.get_element().to_bytes().to_vec());
-    stream.write(buf.as_slice());
+    match stream.write(buf.as_slice()) {
+        Ok(_) => {  },
+        Err(e) => {
+            println!("stream write error: {:?}", e);
+        }
+    }
 }

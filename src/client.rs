@@ -1,12 +1,10 @@
+#![allow(non_snake_case)]
 extern crate argparse;
 extern crate stopwatch;
 
-use std::io::prelude::*;
 use std::io::{ Read, Write };
 use std::net::TcpStream;
-use std::str::from_utf8;
 use std::vec::Vec;
-use std::fs::File;
 
 use argparse::{ ArgumentParser, StoreTrue, Store };
 use stopwatch::{ Stopwatch };
@@ -20,10 +18,9 @@ use eddsa::*;
 mod util;
 use util::*;
 
-const host: &str = "127.0.0.1:8000";
+const HOST: &str = "127.0.0.1:8000";
 
 fn main() {
-    let mut verbose = false;
     let mut net_delay = false;
     let mut keygen = false;
     let mut keyfile = "client.key".to_string();
@@ -80,7 +77,7 @@ fn main() {
 }
 
 fn fn_keygen(keyfile: &String) {
-    let mut stream = TcpStream::connect(host).unwrap();
+    let mut stream = TcpStream::connect(HOST).unwrap();
     let client_keypair: KeyPair = KeyPair::create();
 
     //println!("{:?}", client_keypair);
@@ -110,12 +107,12 @@ fn fn_keygen(keyfile: &String) {
 }
 
 fn fn_sign(msg: &str, keyfile: &String) {
-    let (client_keypair, key_agg) = load_keyfile(keyfile);
+    let (client_keypair, key_agg) = load_keyfile(keyfile).unwrap();
 
     //println!("client_keypair: {:?}", client_keypair);
     //println!("key_agg: {:?}", key_agg);
 
-    let mut stream = TcpStream::connect(host).unwrap();
+    let mut stream = TcpStream::connect(HOST).unwrap();
     // round 1
     let msg = str_to_bigint(msg.to_string());
     //println!("msg: {:?}", msg);
@@ -139,11 +136,23 @@ fn fn_sign(msg: &str, keyfile: &String) {
     let mut buf: Vec<u8> = Vec::new(); 
     buf.append(&mut client_sign_second_msg.R.get_element().to_bytes().to_vec());
     buf.append(&mut Converter::to_vec(&client_sign_second_msg.blind_factor));
-    stream.write(buf.as_slice());
+    match stream.write(buf.as_slice()) {
+        Ok(_) => {  },
+        Err(e) => {
+            println!("stream write error: {:?}", e);
+            return;
+        }
+    }
 
     // R:GE, blind_factor, R:GE, s:FE;
     let mut buf = vec![0u8; 128];
-    stream.read(&mut buf);
+    match stream.read(&mut buf) {
+        Ok(_) => {  },
+        Err(e) => {
+            println!("stream read error: {:?}", e);
+            return;
+        }
+    }
 
     let eight: FE = ECScalar::from(&BigInt::from(8));
     let eight_inverse: FE = eight.invert();
@@ -229,20 +238,11 @@ fn fn_verify(msg: &str, r: &str, s: &str, pubkey: &str) {
 }
 
 fn fn_delay() {
-    let mut stream = TcpStream::connect(host).unwrap();
+    let mut stream = TcpStream::connect(HOST).unwrap();
     let msg = "hello world".to_string();
     let mut buf = vec![4u8];
     buf.append(&mut msg.as_bytes().to_vec());
 
     stream.write(buf.as_slice()).unwrap();
     stream.read(&mut buf).unwrap();
-}
-
-fn str_to_bigint(msg: String) -> BigInt {
-    let strs: Vec<String> = msg.as_bytes()
-        .iter()
-        .map(|b| format!("{:02X}", b))
-        .collect();
-    let msg = strs.join("");
-    BigInt::from_hex(&msg)
 }
