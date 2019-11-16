@@ -2,6 +2,7 @@
 mod tests {
     use curv::elliptic::curves::traits::ECPoint;
     use curv::GE;
+    use serde_json;
     mod two_party_eddsa;
     use two_party_eddsa::{test_com, verify, KeyPair, Signature};
 
@@ -9,6 +10,9 @@ mod tests {
     fn test_ed25519_one_party() {
         let message: [u8; 4] = [79, 77, 69, 82];
         let party1_keys = KeyPair::create();
+        let ser = serde_json::to_string(&p).unwrap();
+        println!("ser: {:?}", ser);
+        println!("ser_size: {:?}", ser.to_bytes().to_vec().len());
         let signature = Signature::sign_single(&message, &party1_keys);
         assert!(verify(&signature, &message, &party1_keys.public_key).is_ok());
     }
