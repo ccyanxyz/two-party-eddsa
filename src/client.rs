@@ -147,7 +147,6 @@ fn fn_sign(stream: &mut TcpStream, msg: &str, keyfile: &String) {
     // round 1
     let msg = str_to_bigint(msg.to_string());
     let msg_hash = HSha256::create_hash(&vec![&msg]);
-    //println!("msg: {:?}", msg);
     let (client_ephemeral_key, client_sign_first_msg, client_sign_second_msg) = Signature::create_ephemeral_key_and_commit(&client_keypair, BigInt::to_vec(&msg_hash).as_slice());
     //println!("client_sign_first_msg: {:?}", client_sign_first_msg);
 
@@ -228,7 +227,7 @@ fn fn_sign(stream: &mut TcpStream, msg: &str, keyfile: &String) {
     ri.push(server_sign_second_msg_R.clone());
     ri.push(client_sign_second_msg.R.clone());
     let r_tot = Signature::get_R_tot(ri);
-    let k = Signature::k(&r_tot, &key_agg.apk, BigInt::to_vec(&msg).as_slice());
+    let k = Signature::k(&r_tot, &key_agg.apk, BigInt::to_vec(&msg_hash).as_slice());
     let s2 = Signature::partial_sign(
         &client_ephemeral_key.r,
         &client_keypair,
@@ -246,7 +245,10 @@ fn fn_sign(stream: &mut TcpStream, msg: &str, keyfile: &String) {
     println!("s: {:?}", sig.s.get_element().to_bytes().to_hex());
 
     // verify
-    //verify(&sig, BigInt::to_vec(&msg).as_slice(), &key_agg.apk);
+    match verify(&sig, BigInt::to_vec(&msg_hash).as_slice(), &key_agg.apk) {
+        Ok(_) => { println!("signature valid"); },
+        Err(_) => { println!("signature invalid"); },
+    }
 }
 
 fn fn_verify(msg: &str, r: &str, s: &str, pubkey: &str) {

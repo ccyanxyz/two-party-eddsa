@@ -111,7 +111,7 @@ fn sign(stream: &mut TcpStream, buf: &mut [u8; 97], filepath: &str) {
     let msg_hash = BigInt::from(&buf[33..65]);
 
     //println!("client_commitment: {:?}", client_commitment);
-    //println!("msg: {:?}", msg);
+    println!("msg_hash: {:?}", msg_hash);
     let eight: FE = ECScalar::from(&BigInt::from(8));
     let eight_inverse: FE = eight.invert();
 
