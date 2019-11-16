@@ -2,8 +2,6 @@
 
 TODO:
 
-* Refactor
-* Bench test
 * Proposal
 
 Problems:
