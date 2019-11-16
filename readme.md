@@ -4,6 +4,7 @@ TODO:
 
 * Refactor
 * Bench test
+* Proposal
 
 ### How to:
 
