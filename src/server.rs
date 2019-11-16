@@ -4,21 +4,38 @@ use std::thread;
 use std::net::{ TcpListener, TcpStream };
 use std::io::{ Read, Write };
 
+use argparse::{ ArgumentParser, Store };
+
 mod eddsa;
 use eddsa::*;
 mod util;
 use util::*;
 
 fn main() {
-    let host = "0.0.0.0:8000";
+    let mut host = "0.0.0.0:".to_string();
+    let mut port = "8000".to_string();
+    let mut keyfile = "server.key".to_string();
 
-    let listener = TcpListener::bind(host).unwrap();
+    {
+        let mut ap = ArgumentParser::new();
+        ap.set_description("two-party-eddsa server");
+        ap.refer(&mut port)
+            .add_option(&["-p", "--port"], Store, "port");
+        ap.refer(&mut keyfile)
+            .add_option(&["-k", "--keyfile"], Store, "keyfile");
+        ap.parse_args_or_exit();
+    }
+
+    host.push_str(&port);
+
+    let listener = TcpListener::bind(&host).unwrap();
     for stream in listener.incoming() {
         match stream {
             Err(e) => println!("Accept err {}", e),
             Ok(stream) => {
+                let filepath = keyfile.clone();
                 thread::spawn(move || {
-                    println!("{:?}", handle_client(stream).unwrap());
+                    println!("{:?}", handle_client(stream, &filepath).unwrap());
                 });
             }
         }
@@ -26,20 +43,20 @@ fn main() {
     drop(listener);
 }
 
-fn handle_client(mut stream: TcpStream) -> io::Result<()> {
+fn handle_client(mut stream: TcpStream, keyfile: &str) -> io::Result<()> {
     //println!("new client-> {:?}", stream.peer_addr().unwrap());
-    let mut buf = [0u8; 200];
-    let len = stream.read(&mut buf).unwrap();
+    let mut buf = [0u8; 65];
+    stream.read(&mut buf).unwrap();
     match buf[0] {
         1 => {
             println!("keygen");
-            keygen(&mut stream, &mut buf);
+            keygen(&mut stream, &mut buf, keyfile);
         },
         2 => {
             println!("sign");
-            sign(&mut stream, &mut buf, len);
+            sign(&mut stream, &mut buf, keyfile);
         },
-        4 => {
+        3 => {
             println!("test network delay");
             stream.write(b"hello back").unwrap();
         }
@@ -49,7 +66,7 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
     Ok(())
 }
 
-fn keygen(stream: &mut TcpStream, buf: &mut [u8; 200]) {
+fn keygen(stream: &mut TcpStream, buf: &mut [u8; 65], keyfile: &str) {
     let client_pubkey = GE::from_bytes(&buf[1..33]).unwrap(); 
     let eight: FE = ECScalar::from(&BigInt::from(8));
     let eight_inverse: FE = eight.invert();
@@ -68,19 +85,19 @@ fn keygen(stream: &mut TcpStream, buf: &mut [u8; 200]) {
     let key_agg = KeyPair::key_aggregation_n(&pks, &0);
     //println!("aggregated_pubkey: {:?}", key_agg);
 
-    save_keyfile("server.key", server_keypair, key_agg);
+    save_keyfile(keyfile, server_keypair, key_agg);
 }
 
-fn sign(stream: &mut TcpStream, buf: &mut [u8; 200], len: usize) {
-    let (server_keypair, key_agg) = load_keyfile("server.key").unwrap();
+fn sign(stream: &mut TcpStream, buf: &mut [u8; 65], keyfile: &str) {
+    let (server_keypair, key_agg) = load_keyfile(keyfile).unwrap();
     
     let client_commitment = BigInt::from(&buf[1..33]);
-    let msg = BigInt::from(&buf[33..len]);
+    let msg_hash = BigInt::from(&buf[33..65]);
 
     //println!("client_commitment: {:?}", client_commitment);
     //println!("msg: {:?}", msg);
 
-    let (server_ephemeral_key, server_sign_first_msg, server_sign_second_msg) = Signature::create_ephemeral_key_and_commit(&server_keypair, BigInt::to_vec(&msg).as_slice());
+    let (server_ephemeral_key, server_sign_first_msg, server_sign_second_msg) = Signature::create_ephemeral_key_and_commit(&server_keypair, BigInt::to_vec(&msg_hash).as_slice());
     //println!("server_sign_first_msg: {:?}", server_sign_first_msg);
 
     match stream.write(&mut Converter::to_vec(&server_sign_first_msg.commitment)) {
@@ -105,7 +122,7 @@ fn sign(stream: &mut TcpStream, buf: &mut [u8; 200], len: usize) {
     let client_sign_second_msg_bf = BigInt::from(&buf[32..64]);
 
     // check commitment
-    assert!(test_com(
+    assert!(check_commitment(
         &client_sign_second_msg_R,
         &client_sign_second_msg_bf,
         &client_commitment,
@@ -115,7 +132,7 @@ fn sign(stream: &mut TcpStream, buf: &mut [u8; 200], len: usize) {
     ri.push(server_sign_second_msg.R.clone());
     ri.push(client_sign_second_msg_R.clone());
     let r_tot = Signature::get_R_tot(ri);
-    let k = Signature::k(&r_tot, &key_agg.apk, &BigInt::to_vec(&msg).as_slice());
+    let k = Signature::k(&r_tot, &key_agg.apk, &BigInt::to_vec(&msg_hash).as_slice());
     let s1 = Signature::partial_sign(
         &server_ephemeral_key.r,
         &server_keypair,

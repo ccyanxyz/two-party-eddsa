@@ -6,6 +6,11 @@ TODO:
 * Bench test
 * Proposal
 
+Problems:
+
+* Men in the middle attack, replay msg
+* Men in the middle attack, cannot generate valid signature
+
 ### How to:
 
 Build:

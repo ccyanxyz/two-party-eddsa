@@ -3,3 +3,4 @@ db
 Cargo.lock
 temp
 *.key
+proposal.md

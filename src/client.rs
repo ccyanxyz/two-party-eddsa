@@ -9,6 +9,9 @@ use std::vec::Vec;
 use argparse::{ ArgumentParser, StoreTrue, Store };
 use stopwatch::{ Stopwatch };
 
+use curv::cryptographic_primitives::hashing::hash_sha256::HSha256;
+use curv::cryptographic_primitives::hashing::traits::Hash;
+
 extern crate rustc_serialize;
 use rustc_serialize::hex::ToHex;
 extern crate hex;
@@ -18,9 +21,8 @@ use eddsa::*;
 mod util;
 use util::*;
 
-const HOST: &str = "127.0.0.1:8000";
-
 fn main() {
+    let mut host = "127.0.0.1:8000".to_string();
     let mut net_delay = false;
     let mut keygen = false;
     let mut keyfile = "client.key".to_string();
@@ -32,7 +34,9 @@ fn main() {
     let mut msg = "hello world".to_string();
     {
         let mut ap = ArgumentParser::new();
-        ap.set_description("two party eddsa client");
+        ap.set_description("two-party-eddsa client");
+        ap.refer(&mut host)
+            .add_option(&["-h", "--host"], Store, "server address:port");
         ap.refer(&mut verify)
             .add_option(&["-v", "--verify"], StoreTrue, "verify");
         ap.refer(&mut r)
@@ -54,14 +58,15 @@ fn main() {
         ap.parse_args_or_exit();
     }
 
+    let mut stream = TcpStream::connect(&host).unwrap();
     if keygen {
         let sw = Stopwatch::start_new();
-        fn_keygen(&keyfile);
+        fn_keygen(&mut stream, &keyfile);
         println!("elapsed_time: {} ms", sw.elapsed_ms());
     }
     if sign {
         let sw = Stopwatch::start_new();
-        fn_sign(&msg, &keyfile);
+        fn_sign(&mut stream, &msg, &keyfile);
         println!("elapsed_time: {} ms", sw.elapsed_ms());
     }
     if verify {
@@ -71,13 +76,12 @@ fn main() {
     }
     if net_delay {
         let sw = Stopwatch::start_new();
-        fn_delay();
+        fn_delay(&mut stream);
         println!("elapsed_time: {} ms", sw.elapsed_ms());
     }
 }
 
-fn fn_keygen(keyfile: &String) {
-    let mut stream = TcpStream::connect(HOST).unwrap();
+fn fn_keygen(stream: &mut TcpStream, keyfile: &String) {
     let client_keypair: KeyPair = KeyPair::create();
 
     //println!("{:?}", client_keypair);
@@ -106,22 +110,22 @@ fn fn_keygen(keyfile: &String) {
     save_keyfile(keyfile, client_keypair, key_agg);
 }
 
-fn fn_sign(msg: &str, keyfile: &String) {
+fn fn_sign(stream: &mut TcpStream, msg: &str, keyfile: &String) {
     let (client_keypair, key_agg) = load_keyfile(keyfile).unwrap();
 
     //println!("client_keypair: {:?}", client_keypair);
     //println!("key_agg: {:?}", key_agg);
 
-    let mut stream = TcpStream::connect(HOST).unwrap();
     // round 1
     let msg = str_to_bigint(msg.to_string());
+    let msg_hash = HSha256::create_hash(&vec![&msg]);
     //println!("msg: {:?}", msg);
-    let (client_ephemeral_key, client_sign_first_msg, client_sign_second_msg) = Signature::create_ephemeral_key_and_commit(&client_keypair, BigInt::to_vec(&msg).as_slice());
+    let (client_ephemeral_key, client_sign_first_msg, client_sign_second_msg) = Signature::create_ephemeral_key_and_commit(&client_keypair, BigInt::to_vec(&msg_hash).as_slice());
     //println!("client_sign_first_msg: {:?}", client_sign_first_msg);
 
     let mut buf = vec![2u8];
     buf.append(&mut Converter::to_vec(&client_sign_first_msg.commitment));
-    buf.append(&mut Converter::to_vec(&msg));
+    buf.append(&mut Converter::to_vec(&msg_hash));
     stream.write(buf.as_slice()).unwrap();
 
     let mut buf = [0u8; 32];
@@ -175,7 +179,7 @@ fn fn_sign(msg: &str, keyfile: &String) {
     };
 
     // check commitment
-    assert!(test_com(
+    assert!(check_commitment(
         &server_sign_second_msg.R,
         &server_sign_second_msg.blind_factor,
         &server_sign_first_msg.commitment
@@ -209,6 +213,7 @@ fn fn_sign(msg: &str, keyfile: &String) {
 
 fn fn_verify(msg: &str, r: &str, s: &str, pubkey: &str) {
     let msg = str_to_bigint(msg.to_string());
+    let msg_hash = HSha256::create_hash(&vec![&msg]);
     let r_decode = hex::decode(r).expect("decode r failed");
     let mut s_decode = hex::decode(s).expect("decode s failed");
     s_decode.reverse();
@@ -227,7 +232,7 @@ fn fn_verify(msg: &str, r: &str, s: &str, pubkey: &str) {
         s: s,
     };
 
-    match verify(&sig, BigInt::to_vec(&msg).as_slice(), &pubkey) {
+    match verify(&sig, BigInt::to_vec(&msg_hash).as_slice(), &pubkey) {
         Ok(_) => {
             println!("true");
         },
@@ -237,10 +242,9 @@ fn fn_verify(msg: &str, r: &str, s: &str, pubkey: &str) {
     }
 }
 
-fn fn_delay() {
-    let mut stream = TcpStream::connect(HOST).unwrap();
+fn fn_delay(stream: &mut TcpStream) {
     let msg = "hello world".to_string();
-    let mut buf = vec![4u8];
+    let mut buf = vec![3u8];
     buf.append(&mut msg.as_bytes().to_vec());
 
     stream.write(buf.as_slice()).unwrap();

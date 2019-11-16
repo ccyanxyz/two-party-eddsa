@@ -242,7 +242,7 @@ pub fn verify(signature: &Signature, message: &[u8], public_key: &GE) -> Result<
     }
 }
 
-pub fn test_com(r_to_test: &GE, blind_factor: &BigInt, comm: &BigInt) -> bool {
+pub fn check_commitment(r_to_test: &GE, blind_factor: &BigInt, comm: &BigInt) -> bool {
     let computed_comm = &HashCommitment::create_commitment_with_user_defined_randomness(
         &r_to_test.bytes_compressed_to_big_int(),
         blind_factor,
