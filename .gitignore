@@ -4,3 +4,5 @@ Cargo.lock
 temp
 *.key
 proposal.md
+server_keys
+client_keys

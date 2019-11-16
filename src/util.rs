@@ -67,3 +67,17 @@ pub fn str_to_bigint(msg: String) -> BigInt {
     let msg = strs.join("");
     BigInt::from_hex(&msg)
 }
+
+pub fn bigint_to_bytes32(num: &BigInt) -> [u8; 32] {
+    let mut buf: Vec<u8> = vec![];
+    let mut b = Converter::to_vec(num);
+    for _ in b.len()..32 {
+        let mut temp = vec![0u8];
+        buf.append(&mut temp);
+    }
+    buf.append(&mut b);
+
+    let mut arr = [0; 32];
+    arr.copy_from_slice(&buf.as_slice()[0..32]);
+    arr
+}

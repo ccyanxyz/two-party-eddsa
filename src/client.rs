@@ -32,6 +32,8 @@ fn main() {
     let mut s = "".to_string();
     let mut pubkey = "".to_string();
     let mut msg = "hello world".to_string();
+    let mut bench_gen = 0;
+    let mut bench_sign = 0;
     {
         let mut ap = ArgumentParser::new();
         ap.set_description("two-party-eddsa client");
@@ -55,17 +57,22 @@ fn main() {
             .add_option(&["-m", "--msg"], Store, "msg to sign");
         ap.refer(&mut net_delay)
             .add_option(&["-d", "--delay"], StoreTrue, "get network delay");
+        ap.refer(&mut bench_gen)
+            .add_option(&["--bench-gen"], Store, "bench keygen");
+        ap.refer(&mut bench_sign)
+            .add_option(&["--bench-sign"], Store, "bench sign");
         ap.parse_args_or_exit();
     }
 
-    let mut stream = TcpStream::connect(&host).unwrap();
     if keygen {
         let sw = Stopwatch::start_new();
+        let mut stream = TcpStream::connect(&host).unwrap();
         fn_keygen(&mut stream, &keyfile);
         println!("elapsed_time: {} ms", sw.elapsed_ms());
     }
     if sign {
         let sw = Stopwatch::start_new();
+        let mut stream = TcpStream::connect(&host).unwrap();
         fn_sign(&mut stream, &msg, &keyfile);
         println!("elapsed_time: {} ms", sw.elapsed_ms());
     }
@@ -76,8 +83,29 @@ fn main() {
     }
     if net_delay {
         let sw = Stopwatch::start_new();
+        let mut stream = TcpStream::connect(&host).unwrap();
         fn_delay(&mut stream);
         println!("elapsed_time: {} ms", sw.elapsed_ms());
+    }
+    if bench_gen != 0 {
+        let sw = Stopwatch::start_new();
+        for _ in 0..bench_gen {
+            let mut temps = TcpStream::connect(&host).unwrap();
+            fn_keygen(&mut temps, &keyfile);
+        }
+        let t = sw.elapsed_ms();
+        let per_key: f64 = t as f64 / bench_gen as f64;
+        println!("bench keygen: {} keys in {} ms, {} ms per key", bench_gen, t, per_key);
+    }
+    if bench_sign != 0 {
+        let sw = Stopwatch::start_new();
+        for _ in 0..bench_sign {
+            let mut temps = TcpStream::connect(&host).unwrap();
+            fn_sign(&mut temps, &msg, &keyfile);
+        }
+        let t = sw.elapsed_ms();
+        let per_sign: f64 = t as f64 / bench_sign as f64;
+        println!("bench sign: {} signs in {} ms, {} ms per sign", bench_sign, t, per_sign);
     }
 }
 
@@ -124,8 +152,9 @@ fn fn_sign(stream: &mut TcpStream, msg: &str, keyfile: &String) {
     //println!("client_sign_first_msg: {:?}", client_sign_first_msg);
 
     let mut buf = vec![2u8];
-    buf.append(&mut Converter::to_vec(&client_sign_first_msg.commitment));
-    buf.append(&mut Converter::to_vec(&msg_hash));
+    buf.append(&mut bigint_to_bytes32(&client_sign_first_msg.commitment).to_vec());
+    buf.append(&mut bigint_to_bytes32(&msg_hash).to_vec());
+    buf.append(&mut client_keypair.public_key.get_element().to_bytes().to_vec());
     stream.write(buf.as_slice()).unwrap();
 
     let mut buf = [0u8; 32];
@@ -139,7 +168,7 @@ fn fn_sign(stream: &mut TcpStream, msg: &str, keyfile: &String) {
     //println!("client_sign_second_msg: {:?}", client_sign_second_msg);
     let mut buf: Vec<u8> = Vec::new(); 
     buf.append(&mut client_sign_second_msg.R.get_element().to_bytes().to_vec());
-    buf.append(&mut Converter::to_vec(&client_sign_second_msg.blind_factor));
+    buf.append(&mut bigint_to_bytes32(&client_sign_second_msg.blind_factor).to_vec());
     match stream.write(buf.as_slice()) {
         Ok(_) => {  },
         Err(e) => {
@@ -179,11 +208,20 @@ fn fn_sign(stream: &mut TcpStream, msg: &str, keyfile: &String) {
     };
 
     // check commitment
-    assert!(check_commitment(
+    let ret = check_commitment(
         &server_sign_second_msg.R,
         &server_sign_second_msg.blind_factor,
         &server_sign_first_msg.commitment
-    ));
+    );
+
+    if ret == false {
+        // for debug;
+        println!("server_sign_second_msg: {:?}", server_sign_second_msg);
+        println!("server_commitment: {:?}", server_sign_first_msg.commitment);
+        println!("client_sign_second_msg: {:?}", client_sign_second_msg);
+        println!("client_commitment: {:?}", client_sign_first_msg.commitment);
+    }
+    assert!(ret);
 
     // round 3
     let mut ri: Vec<GE> = Vec::new();

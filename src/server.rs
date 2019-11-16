@@ -6,6 +6,9 @@ use std::io::{ Read, Write };
 
 use argparse::{ ArgumentParser, Store };
 
+extern crate rustc_serialize;
+use rustc_serialize::hex::ToHex;
+
 mod eddsa;
 use eddsa::*;
 mod util;
@@ -14,26 +17,27 @@ use util::*;
 fn main() {
     let mut host = "0.0.0.0:".to_string();
     let mut port = "8000".to_string();
-    let mut keyfile = "server.key".to_string();
+    let mut keyfile_path = "server_keys".to_string();
 
     {
         let mut ap = ArgumentParser::new();
         ap.set_description("two-party-eddsa server");
         ap.refer(&mut port)
             .add_option(&["-p", "--port"], Store, "port");
-        ap.refer(&mut keyfile)
-            .add_option(&["-k", "--keyfile"], Store, "keyfile");
+        ap.refer(&mut keyfile_path)
+            .add_option(&["-k", "--keyfile-path"], Store, "keyfile path");
         ap.parse_args_or_exit();
     }
 
     host.push_str(&port);
+    keyfile_path.push_str("/");
 
     let listener = TcpListener::bind(&host).unwrap();
     for stream in listener.incoming() {
         match stream {
             Err(e) => println!("Accept err {}", e),
             Ok(stream) => {
-                let filepath = keyfile.clone();
+                let filepath = keyfile_path.clone();
                 thread::spawn(move || {
                     println!("{:?}", handle_client(stream, &filepath).unwrap());
                 });
@@ -43,18 +47,18 @@ fn main() {
     drop(listener);
 }
 
-fn handle_client(mut stream: TcpStream, keyfile: &str) -> io::Result<()> {
+fn handle_client(mut stream: TcpStream, filepath: &str) -> io::Result<()> {
     //println!("new client-> {:?}", stream.peer_addr().unwrap());
-    let mut buf = [0u8; 65];
+    let mut buf = [0u8; 97];
     stream.read(&mut buf).unwrap();
     match buf[0] {
         1 => {
             println!("keygen");
-            keygen(&mut stream, &mut buf, keyfile);
+            keygen(&mut stream, &mut buf, filepath);
         },
         2 => {
             println!("sign");
-            sign(&mut stream, &mut buf, keyfile);
+            sign(&mut stream, &mut buf, filepath);
         },
         3 => {
             println!("test network delay");
@@ -66,7 +70,7 @@ fn handle_client(mut stream: TcpStream, keyfile: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn keygen(stream: &mut TcpStream, buf: &mut [u8; 65], keyfile: &str) {
+fn keygen(stream: &mut TcpStream, buf: &mut [u8; 97], filepath: &str) {
     let client_pubkey = GE::from_bytes(&buf[1..33]).unwrap(); 
     let eight: FE = ECScalar::from(&BigInt::from(8));
     let eight_inverse: FE = eight.invert();
@@ -85,22 +89,33 @@ fn keygen(stream: &mut TcpStream, buf: &mut [u8; 65], keyfile: &str) {
     let key_agg = KeyPair::key_aggregation_n(&pks, &0);
     //println!("aggregated_pubkey: {:?}", key_agg);
 
-    save_keyfile(keyfile, server_keypair, key_agg);
+    let id = client_pubkey.get_element().to_bytes().to_hex();
+    let mut keyfile = filepath.to_string();
+    keyfile.push_str(&id);
+    save_keyfile(&keyfile, server_keypair, key_agg);
 }
 
-fn sign(stream: &mut TcpStream, buf: &mut [u8; 65], keyfile: &str) {
-    let (server_keypair, key_agg) = load_keyfile(keyfile).unwrap();
+fn sign(stream: &mut TcpStream, buf: &mut [u8; 97], filepath: &str) {
     
     let client_commitment = BigInt::from(&buf[1..33]);
     let msg_hash = BigInt::from(&buf[33..65]);
 
     //println!("client_commitment: {:?}", client_commitment);
     //println!("msg: {:?}", msg);
+    let eight: FE = ECScalar::from(&BigInt::from(8));
+    let eight_inverse: FE = eight.invert();
+
+    let client_pubkey = GE::from_bytes(&buf[65..97]).unwrap();
+    let client_pubkey = client_pubkey * &eight_inverse;
+    let mut keyfile = filepath.to_string();
+    let id = client_pubkey.get_element().to_bytes().to_hex();
+    keyfile.push_str(&id);
+    let (server_keypair, key_agg) = load_keyfile(&keyfile).unwrap();
 
     let (server_ephemeral_key, server_sign_first_msg, server_sign_second_msg) = Signature::create_ephemeral_key_and_commit(&server_keypair, BigInt::to_vec(&msg_hash).as_slice());
     //println!("server_sign_first_msg: {:?}", server_sign_first_msg);
 
-    match stream.write(&mut Converter::to_vec(&server_sign_first_msg.commitment)) {
+    match stream.write(&mut bigint_to_bytes32(&server_sign_first_msg.commitment).to_vec()) {
         Ok(_) => {  },
         Err(e) => {
             println!("stream write error: {:?}", e);
@@ -115,18 +130,30 @@ fn sign(stream: &mut TcpStream, buf: &mut [u8; 65], keyfile: &str) {
             println!("stream read error: {:?}", e);
         }
     }
-    let eight: FE = ECScalar::from(&BigInt::from(8));
-    let eight_inverse: FE = eight.invert();
+
     let client_sign_second_msg_R = GE::from_bytes(&buf[0..32]).unwrap();
     let client_sign_second_msg_R = client_sign_second_msg_R * &eight_inverse;
     let client_sign_second_msg_bf = BigInt::from(&buf[32..64]);
 
     // check commitment
-    assert!(check_commitment(
+    let ret = check_commitment(
         &client_sign_second_msg_R,
         &client_sign_second_msg_bf,
         &client_commitment,
-    ));
+    );
+
+    if ret == false {
+        // for debug
+        let client_sign_second_msg = SignSecondMsg {
+            R: client_sign_second_msg_R,
+            blind_factor: client_sign_second_msg_bf,
+        };
+        println!("client_sign_second_msg: {:?}", client_sign_second_msg);
+        println!("client_commitment: {:?}", client_commitment);
+        println!("server_sign_second_msg: {:?}", server_sign_second_msg);
+        println!("server_commitment: {:?}", server_sign_first_msg.commitment);
+    }
+    assert!(ret);
 
     let mut ri: Vec<GE> = Vec::new();
     ri.push(server_sign_second_msg.R.clone());
@@ -143,7 +170,7 @@ fn sign(stream: &mut TcpStream, buf: &mut [u8; 65], keyfile: &str) {
 
     let mut buf: Vec<u8> = Vec::new();
     buf.append(&mut server_sign_second_msg.R.get_element().to_bytes().to_vec());
-    buf.append(&mut Converter::to_vec(&server_sign_second_msg.blind_factor));
+    buf.append(&mut bigint_to_bytes32(&server_sign_second_msg.blind_factor).to_vec());
     buf.append(&mut s1.R.get_element().to_bytes().to_vec());
     buf.append(&mut s1.s.get_element().to_bytes().to_vec());
     match stream.write(buf.as_slice()) {
