@@ -3,6 +3,8 @@ use std::io;
 use std::thread;
 use std::net::{ TcpListener, TcpStream };
 use std::io::{ Read, Write };
+use std::fs;
+use std::path::Path;
 
 use argparse::{ ArgumentParser, Store };
 
@@ -30,6 +32,14 @@ fn main() {
     }
 
     host.push_str(&port);
+    // check keyfile_path
+    match Path::new(&keyfile_path).exists() {
+        true => {  },
+        false => {
+            fs::create_dir(&keyfile_path).expect("create keyfile_path failed");
+        },
+    }
+
     keyfile_path.push_str("/");
 
     let listener = TcpListener::bind(&host).unwrap();
