@@ -27,7 +27,7 @@ fn main() {
 }
 
 fn handle_client(mut stream: TcpStream) -> io::Result<()> {
-    println!("new client-> {:?}", stream.peer_addr().unwrap());
+    //println!("new client-> {:?}", stream.peer_addr().unwrap());
     let mut buf = [0u8; 200];
     let len = stream.read(&mut buf).unwrap();
     match buf[0] {
@@ -36,7 +36,7 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
             keygen(&mut stream, &mut buf);
         },
         2 => {
-            println!("sign_first");
+            println!("sign");
             sign(&mut stream, &mut buf, len);
         },
         4 => {
@@ -54,10 +54,10 @@ fn keygen(stream: &mut TcpStream, buf: &mut [u8; 200]) {
     let eight: FE = ECScalar::from(&BigInt::from(8));
     let eight_inverse: FE = eight.invert();
     let client_pubkey = client_pubkey * &eight_inverse;
-    println!("client_pubkey: {:?}", client_pubkey);
+    //println!("client_pubkey: {:?}", client_pubkey);
 
     let server_keypair = KeyPair::create();
-    println!("server_keypair: {:?}", server_keypair);
+    //println!("server_keypair: {:?}", server_keypair);
     let server_pubkey = server_keypair.public_key.get_element().to_bytes();
     stream.write(&server_pubkey).unwrap();
 
@@ -66,7 +66,7 @@ fn keygen(stream: &mut TcpStream, buf: &mut [u8; 200]) {
     pks.push(server_keypair.public_key.clone());
     pks.push(client_pubkey.clone());
     let key_agg = KeyPair::key_aggregation_n(&pks, &0);
-    println!("aggregated_pubkey: {:?}", key_agg);
+    //println!("aggregated_pubkey: {:?}", key_agg);
 
     save_keyfile("server.key", server_keypair, key_agg);
 }
@@ -77,11 +77,11 @@ fn sign(stream: &mut TcpStream, buf: &mut [u8; 200], len: usize) {
     let client_commitment = BigInt::from(&buf[1..33]);
     let msg = BigInt::from(&buf[33..len]);
 
-    println!("client_commitment: {:?}", client_commitment);
-    println!("msg: {:?}", msg);
+    //println!("client_commitment: {:?}", client_commitment);
+    //println!("msg: {:?}", msg);
 
     let (server_ephemeral_key, server_sign_first_msg, server_sign_second_msg) = Signature::create_ephemeral_key_and_commit(&server_keypair, BigInt::to_vec(&msg).as_slice());
-    println!("server_sign_first_msg: {:?}", server_sign_first_msg);
+    //println!("server_sign_first_msg: {:?}", server_sign_first_msg);
 
     match stream.write(&mut Converter::to_vec(&server_sign_first_msg.commitment)) {
         Ok(_) => {  },
