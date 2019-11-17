@@ -1,8 +1,6 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
-//! Simple ed25519
-//!
-//! See https://tools.ietf.org/html/rfc8032
+
 use curv::cryptographic_primitives::proofs::*;
 pub use curv::elliptic::curves::traits::*;
 pub use curv::{BigInt, FE, GE, SK};
@@ -99,7 +97,7 @@ impl KeyPair {
                 a_i
             })
             .collect();
-        //TODO: remove clones
+
         let mut apk_vec_2_n = apk_vec.clone();
         let pk1 = apk_vec_2_n.remove(0);
         let sum = apk_vec_2_n.iter().fold(pk1, |acc, pk| acc + pk);
@@ -138,8 +136,6 @@ impl Signature {
         keys: &KeyPair,
         message: &[u8],
     ) -> (EphemeralKey, SignFirstMsg, SignSecondMsg) {
-        // here we deviate from the spec, by introducing  non-deterministic element (random number)
-        // to the nonce
         let r = HSha512::create_hash(&vec![
             &BigInt::from(2), // domain seperation
             &keys.expended_private_key.prefix.to_big_int(),
@@ -148,6 +144,7 @@ impl Signature {
         ]);
         let r = reverse_bn_to_fe(&r);
         
+        // randomly choose r rather than generate from hash. maybe faster
         //let r = FE::new_random().to_big_int();
         //let r = reverse_bn_to_fe(&r);
         
@@ -210,7 +207,6 @@ impl Signature {
         let candidate_R = &sigs[0].R.clone();
         assert!(sigs.iter().all(|x| &x.R == candidate_R));
         //sum s part of the signature:
-
         let s1 = sigs.remove(0);
         let sum = sigs
             .iter()
