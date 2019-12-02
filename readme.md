@@ -1,6 +1,5 @@
 ## Two party EdDSA signature scheme
 
-Yan Chen [ccyanxyz@gmail.com]
 
 ### 1. The Scheme
 
